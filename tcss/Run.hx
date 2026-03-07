@@ -18,7 +18,7 @@ class Run
 
 		final libData = haxe.Json.parse(File.getContent(libDir + '/haxelib.json'));
 
-		Sys.println('Octa Typed Cascading Style Sheets ' + libData.version);
+		Sys.println('Octacube Typed Cascading Style Sheets ' + libData.version);
 
 		final args = Sys.args();
 
