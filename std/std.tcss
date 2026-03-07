@@ -1,0 +1,58 @@
+extern dynamic = std.dynamic;
+extern int     = std.int;
+extern float   = std.float;
+extern string  = std.dynamic; // std.string;
+extern bool    = std.dynamic; // std.bool;
+extern color   = std.color;
+
+extern size    = std.unit<int | float, px | %>;
+extern angle   = std.unit<float>;
+extern time    = std.unit<float>;
+
+extern display.mode = std.enum<block | inline | flex | grid | none>;
+extern position.mode = std.enum<relative | absolute | fixed | sticky>;
+
+extern timing.function = std.enum<linear | ease | ease-in | ease-out | cubic-bezier>;
+
+extern direction = std.enum<top | bottom | left | right | center>;
+
+extern rule root {
+    display.mode display;
+    position.mode position;
+    
+    // Sizing
+    size width;
+    size height;
+    size minWidth;
+    size minHeight;
+    size maxWidth;
+    size maxHeight;
+    
+    size top;
+    size bottom;
+    size left;
+    size right;
+    
+    // Spacing
+    size margin;
+    size margin.top;
+    size margin.bottom;
+    size margin.left;
+    size margin.right;
+    
+    size padding;
+    size padding.top;
+    size padding.bottom;
+    size padding.left;
+    size padding.right;
+    
+   
+    color background.color;
+    color color;
+    float opacity;
+    int zIndex;
+    
+    string boxShadow;
+    timing.function transitionTiming;
+    time transitionDuration;
+}
