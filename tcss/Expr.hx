@@ -22,9 +22,9 @@ typedef Expr = Pos &
 
 enum Const
 {
-	CInt(v:Int, ?unit:String);
-	CFloat(v:Float, ?unit:String);
-	CString(v:String);
+	CInt(i:Int, ?unit:String);
+	CFloat(f:Float, ?unit:String);
+	CString(s:String);
 	CColor(color:String);
 }
 
@@ -34,6 +34,7 @@ enum ExprDef
 	EId(id:String);
 	EBinop(op:String, e1:Expr, e2:Expr);
 	EField(obj:Expr, field:String);
+	EObject(fields:Loc<Array<Field>>);
 }
 
 typedef Module = Array<Definition>;
@@ -52,6 +53,7 @@ enum DefinitionKind
 	DImport(path:String, isUrl:Bool);
 	DExtern(name:String, value:TypeNode);
 	DRule(name:String, fields:Array<Field>);
+	DStruct(name:String, fields:Array<Field>);
 	DAbstract(name:String, fields:Array<Field>);
 	DClass(name:String, parent:Null<String>, fields:Array<Field>);
 	DExternCss(content:String);

@@ -128,6 +128,13 @@ class Parser
 								}
 							default:
 								error(EUnexpectedToken(t));
+							case 'struct':
+								final typeName = getIdent();
+
+								final fields = parseFields();
+
+								addDefinition(DStruct(typeName.t, fields.t), typeName.pos, fields.pos);
+
 							case 'abstract':
 								final typeName = getIdent();
 
@@ -224,7 +231,7 @@ class Parser
 			switch (tk.t)
 			{
 				case TBrClose:
-					pos.max = tk.e;
+					pos.max = tk.e - 1;
 					pos.min += 1;
 					break;
 				default:
@@ -233,7 +240,7 @@ class Parser
 
 			if (enableRecovery)
 			{
-				var field:Null<Field> = try
+				var fieldList:Null<Array<Field>> = try
 				{
 					parseField();
 				} catch (e:Error)
@@ -241,15 +248,17 @@ class Parser
 					null;
 				}
 
-				if (field != null)
-					fields.push(field);
+				if (fieldList != null)
+					for (field in fieldList)
+						fields.push(field);
 				else
 				{
 					error(EUnexpectedToken(getToken()));
 				}
 			}
 			else
-				fields.push(parseField());
+				for (field in parseField())
+					fields.push(field);
 		}
 
 		return {
@@ -258,7 +267,7 @@ class Parser
 		}
 	}
 
-	function parseField():Field
+	function parseField():Array<Field>
 	{
 		final access:Array<FieldAccess> = [];
 
@@ -285,17 +294,19 @@ class Parser
 						switch (next.t)
 						{
 							case TRaw(content):
-								return {
-									pos:
-										{
-											line: id.pos.line,
-											min: id.pos.min,
-											max: getCurToken().e,
-											file: file
-										},
-									kind: FExternCss({t: content, pos: getCurToken().pos}),
-									access: access
-								};
+								return [
+									{
+										pos:
+											{
+												line: id.pos.line,
+												min: id.pos.min,
+												max: getCurToken().e,
+												file: file
+											},
+										kind: FExternCss({t: content, pos: getCurToken().pos}),
+										access: access
+									}
+								];
 							case TEof:
 								error(EIncomplete(IRawCss));
 								return null;
@@ -309,7 +320,7 @@ class Parser
 				default:
 					back();
 
-					var type = parseType();
+					final type = parseType();
 
 					if (type == null)
 					{
@@ -323,8 +334,27 @@ class Parser
 						suggestion = SFieldName(type.t);
 					}
 
-					var nameLoc = getIdent();
-					if (nameLoc == null)
+					final tk = getToken();
+
+					final nameLocs:Array<Loc<String>> = [];
+					switch (tk.t)
+					{
+						case TId(id):
+							nameLocs.push({t: id, pos: tk.pos});
+						case TBrOpen:
+							nameLocs.push(getIdent());
+
+							while (maybe(TComma))
+							{
+								nameLocs.push(getIdent());
+							}
+
+							ensure(TBrClose);
+						default:
+							error(EUnexpectedToken(tk));
+					}
+
+					if (nameLocs == null)
 					{
 						error(EIncomplete(IField));
 						return null;
@@ -349,33 +379,33 @@ class Parser
 						value = parseExpr();
 					}
 
-					if (!maybe(TSemicolon))
+					if (!value?.expr.match(EObject(_)) && !maybe(TSemicolon))
 					{
 						error(EIncomplete(ISemicolon));
 					}
 
-					return {
-						pos:
+					return [
+						for (nameLoc in nameLocs)
+						{
 							{
-								line: id.pos.line,
-								min: id.pos.min,
-								max: getCurToken().e,
-								file: file
-							},
-						kind: FVar(nameLoc, type, value, isDefault),
-						access: access
-					}
+								pos:
+									{
+										line: id.pos.line,
+										min: id.pos.min,
+										max: getCurToken().e,
+										file: file
+									},
+								kind: FVar(nameLoc, type, value, isDefault),
+								access: access
+							}
+						}
+					];
 			}
 		}
 	}
 
 	function parseType():Null<Loc<TypeNode>>
 	{
-		if (enableRecovery && isIncomplete())
-		{
-			return null;
-		}
-
 		var tk = getToken();
 
 		switch (tk.t)
@@ -451,6 +481,13 @@ class Parser
 				return parseExprNext(makeExpr(EConst(CColor(color)), tk.s, tk.e, tk.l));
 			case TInt(i):
 				return parseExprNext(makeExpr(EConst(CInt(i, null)), tk.s, tk.e, tk.l));
+			case TFloat(f):
+				return parseExprNext(makeExpr(EConst(CFloat(f, null)), tk.s, tk.e, tk.l));
+			case TString(s):
+				return parseExprNext(makeExpr(EConst(CString(s)), tk.s, tk.e, tk.l));
+			case TBrOpen:
+				back();
+				return parseExprNext(makeExpr(EObject(parseFields()), tk.s, getCurToken().e, tk.l));
 			default:
 				error(EUnexpectedToken(tk));
 		}
@@ -475,6 +512,8 @@ class Parser
 				{
 					case EConst(CInt(i, null)):
 						return parseExprNext(makeExpr(EConst(CInt(i, id)), e.min, tk.e, e.line));
+					case EConst(CFloat(f, null)):
+						return parseExprNext(makeExpr(EConst(CFloat(f, id)), e.min, tk.e, e.line));
 					default:
 						error(EUnexpectedToken(tk));
 				}
@@ -483,6 +522,8 @@ class Parser
 				{
 					case EConst(CInt(i, null)):
 						return parseExprNext(makeExpr(EConst(CInt(i, '%')), e.min, tk.e, e.line));
+					case EConst(CFloat(f, null)):
+						return parseExprNext(makeExpr(EConst(CFloat(f, '%')), e.min, tk.e, e.line));
 					default:
 						error(EUnexpectedToken(tk));
 				}

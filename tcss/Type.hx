@@ -24,6 +24,7 @@ enum TCssType
 	TExtern(e:TCssExtern);
 	TRule(r:TCssRule);
 	TAbstract(a:TCssAbstract);
+	TStruct(s:TCssStruct);
 	TClass(c:TCssClass);
 }
 
@@ -34,8 +35,10 @@ enum TCssStdType
 	TColor;
 	TUnit(types:Array<TCssType>, units:Array<String>);
 	TDynamic;
-	TEnum(values:Array<TCssType>);
+	TVirtual(id:String);
+	TEnum(type:TCssType, values:Array<TCssType>);
 	TIdent(id:String);
+	TString;
 }
 
 class TCssExtern
@@ -68,6 +71,7 @@ class TCssRule
 }
 
 class TCssAbstract extends TCssRule {}
+class TCssStruct extends TCssRule {}
 
 class TCssClass extends TCssRule
 {

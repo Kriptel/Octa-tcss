@@ -8,6 +8,7 @@ enum TokenDef
 	TString(s:String);
 	TUrl(path:String);
 	TInt(i:Int);
+	TFloat(f:Float);
 	TColor(color:String);
 	TOp(op:String);
 	TRaw(raw:String); // </>abc</>
@@ -169,10 +170,30 @@ class Lexer
 					addToken(TString(readUntil('"'.code)), start);
 				case '#'.code:
 					addToken(TColor(readHex()), start);
+
 				default:
 					if (isDigit(char))
 					{
-						addToken(TInt(readInt(char)), start);
+						final i:Int = readInt(char);
+
+						final char:Int = readChar();
+
+						if (char == '.'.code)
+						{
+							final char:Int = readChar();
+
+							if (!isDigit(char))
+								error(EUnexpectedChar(char));
+
+							final i2:String = readDigits(char);
+
+							addToken(TFloat(Std.parseFloat(i + '.' + i2)), start);
+						}
+						else
+						{
+							this.char = char;
+							addToken(TInt(i), start);
+						}
 					}
 					else if (isIdentChar(char))
 					{
@@ -272,7 +293,12 @@ class Lexer
 		return s;
 	}
 
-	function readInt(firstChar:Int):Int
+	inline function readInt(firstChar:Int):Int
+	{
+		return Std.parseInt(readDigits(firstChar));
+	}
+
+	function readDigits(firstChar:Int):String
 	{
 		var s:String = String.fromCharCode(firstChar);
 
@@ -291,7 +317,7 @@ class Lexer
 			}
 		}
 
-		return Std.parseInt(s);
+		return s;
 	}
 
 	function readHex():String
@@ -302,8 +328,7 @@ class Lexer
 			var c = readChar();
 			if (c == -1)
 				break;
-			var isHex = (c >= '0'.code && c <= '9'.code) || (c >= 'a'.code && c <= 'f'.code) || (c >= 'A'.code && c <= 'F'.code);
-			if (isHex)
+			if (isHex(c))
 			{
 				s += String.fromCharCode(c);
 			}
@@ -376,6 +401,11 @@ class Lexer
 	inline function isDigit(c:Int):Bool
 	{
 		return c >= '0'.code && c <= '9'.code;
+	}
+
+	inline function isHex(c:Int):Bool
+	{
+		return isDigit(c) || (c >= 'a'.code && c <= 'f'.code) || (c >= 'A'.code && c <= 'F'.code);
 	}
 
 	function error(e:Error):Void

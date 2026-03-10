@@ -1,5 +1,13 @@
 import std;
 
 class button {
-    size width = 10px;
+    size { width, height } = 20px;
+    
+    Spacing margin = {
+        size top = 2px;
+        size bottom = 4px;
+        size left = 6px;
+        size right = 8px;
+    }
 }
+

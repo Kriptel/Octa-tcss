@@ -1,6 +1,5 @@
 package tcss;
 
-import tcss.Type.TCssType;
 import tcss.Expr;
 import tcss.Lexer.Token;
 
@@ -8,10 +7,11 @@ enum Error
 {
 	EUnexpectedChar(char:Int);
 	EUnexpectedToken(tk:Token);
+	EUnexpectedExpr(e:Expr);
 	EIncomplete(kind:IncompleteKind, ?pos:Pos);
 	EUnknownType(type:TypeNode, ?pos:Pos);
-	ETypeMismatch(type:TCssType, expr:Expr);
-	EUnitMismatch(unit:Loc<String>, expectedUnits:Array<String>);
+	ETypeMismatch(type:Loc<TypeNode>, expr:Expr);
+	ESemaError(info:String, ?pos:Pos);
 }
 
 enum IncompleteKind

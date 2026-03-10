@@ -1,9 +1,14 @@
 {
-    "lineEnds":{
+    "lineEnds": {
         "leftCurly": "both",
         "rightCurly": "both"
     },
-    "sameLine":{
+    "sameLine": {
         "ifElse": "next"
+    },
+    "wrapping": {
+        "opBoolChain": {
+            "defaultWrap": "equalNumber"
+        }
     }
 }

@@ -1,20 +1,35 @@
 extern dynamic = std.dynamic;
+extern enum = std.enum;
+extern one_of = std.one_of;
+extern unit = std.unit;
+
 extern int     = std.int;
 extern float   = std.float;
-extern string  = std.dynamic; // std.string;
-extern bool    = std.dynamic; // std.bool;
+extern string  = std.string;
+extern bool    = enum<true | false>;
 extern color   = std.color;
 
-extern size    = std.unit<int | float, px | %>;
-extern angle   = std.unit<float>;
-extern time    = std.unit<float>;
+extern size    = one_of<unit<int | float, px | % | rem | em | vh | vw> | enum<auto> | std.zero>;
+extern angle   = unit<float, deg | rad | grad | turn>;
+extern time    = unit<float, s | ms>;
 
-extern display.mode = std.enum<block | inline | flex | grid | none>;
-extern position.mode = std.enum<relative | absolute | fixed | sticky>;
+extern display.mode = enum<block | inline | flex | grid | inline-block | inline-flex | none>;
+extern position.mode = enum<relative | absolute | fixed | sticky>;
+extern timing.function = enum<linear | ease | ease-in | ease-out | cubic-bezier>;
+extern direction = enum<top | bottom | left | right | center>;
+extern border.style = enum<none | solid | dashed | dotted | double>;
+extern overflow.mode = enum<visible | hidden | scroll | auto>;
+extern font.weight = enum<normal | bold | lighter | bolder | int>;
+extern text.align = enum<left | right | center | justify>;
+extern cursor.type = enum<default | pointer | text | wait | move | not-allowed>;
 
-extern timing.function = std.enum<linear | ease | ease-in | ease-out | cubic-bezier>;
-
-extern direction = std.enum<top | bottom | left | right | center>;
+struct Spacing {
+    size self;
+    size top;
+    size bottom;
+    size left;
+    size right;
+}
 
 extern rule root {
     display.mode display;
@@ -33,19 +48,9 @@ extern rule root {
     size left;
     size right;
     
-    // Spacing
-    size margin;
-    size margin.top;
-    size margin.bottom;
-    size margin.left;
-    size margin.right;
+    Spacing margin;
     
-    size padding;
-    size padding.top;
-    size padding.bottom;
-    size padding.left;
-    size padding.right;
-    
+    Spacing padding;
    
     color background.color;
     color color;

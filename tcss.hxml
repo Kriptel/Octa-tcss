@@ -4,4 +4,10 @@
 
 --debug
 
---run TCss
+--main TCss
+
+# --run TCss
+
+-hl test/export/hl/main.hl
+
+-cmd hl test/export/hl/main.hl
