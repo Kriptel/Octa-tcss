@@ -35,7 +35,9 @@ You can define structured styles using classes, which compile into standard CSS 
 ```tcss
 class button
 {
-    size width = 12;
+    size width = 40px;
+
+    size { height, maxWidth } = 120px;
 }
 
 ```
