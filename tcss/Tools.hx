@@ -1,7 +1,8 @@
 package tcss;
 
+import haxe.iterators.StringKeyValueIterator;
 import tcss.Type;
-import tcss.Expr.Definition;
+import tcss.Expr;
 
 class Tools
 {
@@ -25,10 +26,12 @@ class Tools
 		}
 	}
 
-	inline public static function getRule<T:TCssRule>(type:TCssType):Null<T>
+	inline public static function getRule<T:TCssRule>(type:Null<TCssType>):Null<T>
 	{
 		return switch (type)
 		{
+			case null:
+				return null;
 			case TRule(c) | TStruct(c) | TAbstract(c) | TClass(c):
 				cast c;
 			default:
@@ -86,5 +89,74 @@ class Tools
 		}
 
 		return true;
+	}
+
+	public static function isWithin(offset:Int, pos:Pos):Bool
+	{
+		return offset >= pos.min && offset <= pos.max;
+	}
+
+	public static function combinePos(start:Pos, end:Pos):Null<Pos>
+	{
+		if (start.file != end.file)
+			return null;
+
+		return {
+			min: start.min,
+			max: end.max,
+			line: start.line,
+			char: start.char,
+			endLine: end.endLine,
+			endChar: end.endChar,
+			file: start.file
+		}
+	}
+
+	public static function findFieldInRule(rule:TCssRule, fieldName:String):Null<Field>
+	{
+		for (f in rule.fields)
+		{
+			switch (f.kind)
+			{
+				case FVar(n, _, _, _) if (n.t == fieldName):
+					return f;
+				default:
+			}
+		}
+
+		if (rule is TCssClass)
+		{
+			final parent = cast(rule, TCssClass).parent;
+			if (parent != null)
+				return findFieldInRule(parent, fieldName);
+		}
+
+		return null;
+	}
+
+	public static function escapeIdent(ident:String):String
+	{
+		final s = new StringBuf();
+
+		for (i => c in new StringKeyValueIterator(ident))
+		{
+			if (c >= '0'.code && c <= '9'.code && (i == 0 || ident.charCodeAt(0) == '-'.code))
+			{
+				s.add("\\" + StringTools.hex(c) + " ");
+				continue;
+			}
+			else
+				if ((c >= 'A'.code && c <= 'Z'.code) || (c >= 'a'.code && c <= 'z'.code) || (c >= '0'.code && c <= '9'.code) || c == '_'.code || c == '-'.code || (i == 0 && (c == '.'.code || c == ':'.code)))
+			{
+				s.addChar(c);
+			}
+			else
+			{
+				s.add('\\');
+				s.addChar(c);
+			}
+		}
+
+		return s.toString();
 	}
 }

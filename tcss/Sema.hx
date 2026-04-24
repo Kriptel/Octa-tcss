@@ -9,6 +9,7 @@ class Sema
 {
 	public var types:Map<String, TCssType> = [];
 	public var typeImpls:Map<String, Definition> = [];
+	public var publicVariables:Map<String, RuleContent> = [];
 	public var errors:Array<Error> = [];
 	public var enableRecovery:Bool = false;
 
@@ -20,12 +21,14 @@ class Sema
 
 		types.clear();
 		typeImpls.clear();
+		publicVariables.clear();
 		errors = [];
 
 		types['std.dynamic'] = TStdType(TDynamic);
 		types['std.enum'] = TStdType(TVirtual('std.enum'));
 		types['std.one_of'] = TStdType(TVirtual('std.one_of'));
 		types['std.zero'] = TStdType(TVirtual('std.zero'));
+		types['std.extern.expr'] = TStdType(TVirtual('std.extern.expr'));
 		types['std.int'] = TStdType(TInt);
 		types['std.float'] = TStdType(TFloat);
 		types['std.string'] = TStdType(TString);
@@ -110,38 +113,44 @@ class Sema
 	{
 		final parentFields:Map<String, Loc<TypeNode>> = [];
 
-		for (f in c.parent.fields)
+		for (field in c.parent.fields)
 		{
-			switch (f.kind)
+			switch (field.kind)
 			{
 				case FVar(name, type, value, isDefault):
 					if (parentFields.exists(name.t))
-						error(ESemaError('Duplicate declaration of field `${name.t}`', f.pos));
+						error(ESemaError('Duplicate declaration of field `${name.t}`', field.pos));
 
 					parentFields[name.t] = type;
 				case FExternCss(content):
 			}
 		}
 
-		for (f in c.fields)
+		for (field in c.fields)
 		{
-			switch (f.kind)
+			if (!field.access.contains(ACustom))
 			{
-				case FVar(name, type, value, isDefault):
-					if (!parentFields.exists(name.t))
-					{
-						error(ESemaError('Unknown property `${name.t}`', name.pos));
-					}
+				switch (field.kind)
+				{
+					case FVar(name, type, value, isDefault):
+						if (!parentFields.exists(name.t))
+						{
+							error(ESemaError('Unknown property `${name.t}`', name.pos));
+						}
 
-					final t:TCssType = getType(type.t);
-					final parentType:TCssType = followType(getType(parentFields[name.t].t));
+						if (type.t == null || !parentFields.exists(name.t))
+							continue;
 
-					if (!Tools.matchTypes(followType(t), parentType))
-					{
-						error(ESemaError('`${tcssTypeToString(t)}` should be `${tcssTypeToString(parentType)}`', name.pos));
-					}
+						final t:TCssType = getType(type.t);
+						final parentType:TCssType = getType(parentFields[name.t].t);
 
-				case FExternCss(content):
+						if (!Tools.matchTypes(followType(t), followType(parentType)))
+						{
+							error(ESemaError('`${tcssTypeToString(t)}` should be `${tcssTypeToString(parentType)}`', name.pos));
+						}
+
+					case FExternCss(content):
+				}
 			}
 		}
 	}
@@ -283,7 +292,7 @@ class Sema
 		}
 	}
 
-	inline function getType(type:TypeNode, ?pos:Pos):TCssType
+	function getType(type:TypeNode, ?pos:Pos):TCssType
 	{
 		return switch (type)
 		{
@@ -351,7 +360,33 @@ class Sema
 		if (type == null)
 			return false;
 
-		final e:ExprDef = expr?.expr;
+		var e:ExprDef = expr?.expr;
+
+		switch (e)
+		{
+			case EField(obj, field):
+				switch (obj.expr)
+				{
+					case EId(id):
+						final type:TCssRule = Tools.getRule(getTypeFromString(id));
+
+						if (type != null)
+						{
+							final f = Tools.findFieldInRule(type, field);
+							if (f.access.contains(ACustom))
+							{
+								switch (f.kind)
+								{
+									case FVar(name, type, value, _) if (value != null):
+										e = value.expr;
+									default:
+								}
+							}
+						}
+					default:
+				}
+			default:
+		}
 
 		final type = followType(type);
 
@@ -418,6 +453,8 @@ class Sema
 						false;
 					case TVirtual('std.zero'):
 						e.match(EConst(CInt(0, null))) || e.match(EConst(CFloat(0, null)));
+					case TVirtual('std.extern.expr'):
+						e.match(EConst(CString(_)));
 					case TVirtual(id):
 						false;
 				}
@@ -456,6 +493,24 @@ class Sema
 		{
 			switch (type)
 			{
+				case TRule(r), TAbstract(r):
+					for (f in r.fields)
+					{
+						switch (f.kind)
+						{
+							case FVar(name, type, value, isDefault) if (value != null):
+								final t = followType(getType(type.t));
+								if (f.access.contains(ACustom))
+								{
+									if (f.access.contains(APublic))
+									{
+										publicVariables.set(r.name + '_' + name.t, Variable(r.name + '_' + name.t, exprToString(value, t)));
+									}
+								}
+							default:
+						}
+					}
+
 				case TClass(c):
 					final selectors = ["." + c.name];
 					final body:Array<RuleContent> = [];
@@ -466,6 +521,9 @@ class Sema
 				default:
 			}
 		}
+
+		ast.insert(0, TRuleNode([':root'], [for (v in publicVariables) v]));
+
 		return ast;
 	}
 
@@ -483,7 +541,22 @@ class Sema
 			switch (f.kind)
 			{
 				case FVar(name, type, value, isDefault) if (value != null):
-					body.push(Field(name.t, getType(type.t), exprToString(value), false));
+					final t = followType(getType(type.t));
+					if (f.access.contains(ACustom))
+					{
+						if (f.access.contains(APublic))
+						{
+							publicVariables.set(rule.name + '_' + name.t, Variable(name.t, exprToString(value, t)));
+						}
+						else
+						{
+							body.push(Variable(name.t, exprToString(value, t)));
+						}
+					}
+					else
+					{
+						body.push(Field(name.t, t, exprToString(value, t), false));
+					}
 				case FExternCss(content):
 					body.push(Raw(content.t));
 				default:
@@ -491,7 +564,7 @@ class Sema
 		}
 	}
 
-	public function exprToString(e:Expr):String
+	public function exprToString(e:Expr, ?expectedType:TCssType):String
 	{
 		return switch (e.expr)
 		{
@@ -500,11 +573,52 @@ class Sema
 				{
 					case CInt(v, u): v + (u != null ? u : "");
 					case CFloat(v, u): v + (u != null ? u : "");
-					case CString(v): '"' + v + '"';
-					case CColor(c): c;
+					case CString(v):
+						if (expectedType != null)
+						{
+							switch (expectedType)
+							{
+								case TStdType(TVirtual('std.extern.expr')): v;
+								default: '"' + v + '"';
+							}
+						}
+						else '"' + v + '"';
+					case CColor(c): '#' + c;
 				}
 			case EId(id): id;
-			case EField(expr, field): exprToString(expr) + '.' + field;
+			case EField(expr, fieldName):
+				switch (expr.expr)
+				{
+					case EId(id):
+						final rule = Tools.getRule(getTypeFromString(id));
+
+						if (rule != null)
+						{
+							final field = Tools.findFieldInRule(rule, fieldName);
+
+							if (field != null && field.access.contains(ACustom))
+							{
+								if (field.access.contains(APublic))
+								{
+									'var(--' + exprToString(expr) + '_' + fieldName + ')';
+								}
+								else
+								{
+									'var(--' + fieldName + ')';
+								}
+							}
+							else
+							{
+								exprToString(expr) + '.' + fieldName;
+							}
+						}
+						else
+						{
+							exprToString(expr) + '.' + fieldName;
+						}
+					default:
+						exprToString(expr) + '.' + fieldName;
+				}
 			default: throw e.expr;
 		}
 	}

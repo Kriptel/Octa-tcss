@@ -36,6 +36,9 @@ abstract Token(__Token) from __Token
 			min: this.s,
 			max: this.e,
 			line: this.l,
+			char: this.c,
+			endLine: this.el,
+			endChar: this.ec,
 			file: this.f
 		}
 	}
@@ -44,9 +47,15 @@ abstract Token(__Token) from __Token
 private typedef __Token =
 {
 	var t:TokenDef;
-	var s:Int;
-	var e:Int;
-	var l:Int;
+
+	var s:Int; // min
+	var e:Int; // max
+
+	var l:Int; // line
+	var c:Int; // char
+	var el:Int; // line
+	var ec:Int; // char
+
 	var f:String;
 }
 
@@ -56,6 +65,7 @@ class Lexer
 	var file:String;
 	var pos:Int = 0;
 	var curLine:Int = 1;
+	var curCharNum:Int = 0;
 
 	public function new(input:String, ?fileName:String = null)
 	{
@@ -76,6 +86,7 @@ class Lexer
 		else
 		{
 			c = StringTools.fastCodeAt(input, pos++);
+			curCharNum++;
 		}
 
 		if (StringTools.isEof(c))
@@ -84,6 +95,7 @@ class Lexer
 		if (c == '\n'.code)
 		{
 			curLine++;
+			curCharNum = 0;
 		}
 
 		return c;
@@ -96,6 +108,8 @@ class Lexer
 		while (true)
 		{
 			final start:Int = pos;
+			final startLine:Int = curLine;
+			final startChar:Int = curCharNum;
 
 			final char:Int = readChar();
 
@@ -106,39 +120,39 @@ class Lexer
 			{
 				case ' '.code | '\t'.code | '\r'.code, '\n'.code:
 				case '='.code | '|'.code, '%'.code:
-					addToken(TOp(String.fromCharCode(char)), start);
+					addToken(TOp(String.fromCharCode(char)), start, null, startLine, startChar);
 				case '.'.code:
-					addToken(TDot, start);
+					addToken(TDot, start, null, startLine, startChar);
 				case ';'.code:
-					addToken(TSemicolon, start);
+					addToken(TSemicolon, start, null, startLine, startChar);
 				case ':'.code:
-					addToken(TDoubleDot, start);
+					addToken(TDoubleDot, start, null, startLine, startChar);
 				case ','.code:
-					addToken(TComma, start);
+					addToken(TComma, start, null, startLine, startChar);
 				case '('.code:
-					addToken(TBOpen, start);
+					addToken(TBOpen, start, null, startLine, startChar);
 				case ')'.code:
-					addToken(TBClose, start);
+					addToken(TBClose, start, null, startLine, startChar);
 				case '{'.code:
-					addToken(TBrOpen, start);
+					addToken(TBrOpen, start, null, startLine, startChar);
 				case '}'.code:
-					addToken(TBrClose, start);
+					addToken(TBrClose, start, null, startLine, startChar);
 				case '<'.code:
 					final char = readChar();
 
 					if (char == '/'.code)
 					{
 						ensureChar('>'.code);
-						addToken(TRaw(readRaw()), start);
+						addToken(TRaw(readRaw()), start, null, startLine, startChar);
 					}
 					else
 					{
 						this.char = char;
-						addToken(TLt, start);
+						addToken(TLt, start, null, startLine, startChar);
 					}
 
 				case '>'.code:
-					addToken(TMt, start);
+					addToken(TMt, start, null, startLine, startChar);
 				case '/'.code:
 					var char = readChar();
 
@@ -153,23 +167,23 @@ class Lexer
 					else
 					{
 						this.char = char;
-						addToken(TOp("/"), start, pos - 1);
+						addToken(TOp("/"), start, pos - 1, startLine, startChar);
 					}
 				case '@'.code:
 					final char = readChar();
 
 					if (char == '<'.code)
 					{
-						addToken(TUrl(readUntil(">".code)), start);
+						addToken(TUrl(readUntil(">".code)), start, null, startLine, startChar);
 					}
 					else
 					{
 						error(EUnexpectedChar(char));
 					}
 				case '"'.code:
-					addToken(TString(readUntil('"'.code)), start);
+					addToken(TString(readUntil('"'.code)), start, null, startLine, startChar);
 				case '#'.code:
-					addToken(TColor(readHex()), start);
+					addToken(TColor(readHex()), start, null, startLine, startChar);
 
 				default:
 					if (isDigit(char))
@@ -187,17 +201,17 @@ class Lexer
 
 							final i2:String = readDigits(char);
 
-							addToken(TFloat(Std.parseFloat(i + '.' + i2)), start);
+							addToken(TFloat(Std.parseFloat(i + '.' + i2)), start, null, startLine, startChar);
 						}
 						else
 						{
 							this.char = char;
-							addToken(TInt(i), start);
+							addToken(TInt(i), start, null, startLine, startChar);
 						}
 					}
 					else if (isIdentChar(char))
 					{
-						addToken(TId(readIdent(char)), start);
+						addToken(TId(readIdent(char)), start, null, startLine, startChar);
 					}
 					else
 					{
@@ -209,7 +223,7 @@ class Lexer
 		return tokens;
 	}
 
-	function addToken(token:TokenDef, ?start:Int, ?end:Int, ?line:Int):Void
+	function addToken(token:TokenDef, ?start:Int, ?end:Int, ?line:Int, ?char:Int, ?endLine:Int, ?endChar:Int):Void
 	{
 		tokens.push(
 			{
@@ -217,27 +231,31 @@ class Lexer
 				s: start ?? pos,
 				e: end ?? (char != -1 ? pos - 1 : pos),
 				l: line ?? curLine,
+				c: char ?? curCharNum,
+				el: endLine ?? curLine,
+				ec: endChar ?? curCharNum - 1,
 				f: file
 			});
 	}
 
 	function readIdent(firstChar:Int):String
 	{
-		var s:String = String.fromCharCode(firstChar);
+		final s:StringBuf = new StringBuf();
+		s.addChar(firstChar);
 
 		while (true)
 		{
 			final c:Int = readChar();
 			if (isIdentChar(c) || isDigit(c))
 			{
-				s += String.fromCharCode(c);
+				s.addChar(c);
 			}
 			else if (c == '\\'.code)
 			{
 				final c:Int = readChar();
 
 				if (c != -1)
-					s += '\\' + String.fromCharCode(c);
+					s.addChar(c);
 				else
 					break;
 			}
@@ -248,12 +266,12 @@ class Lexer
 			}
 		}
 
-		return s;
+		return s.toString();
 	}
 
 	function readRaw():String
 	{
-		var s:String = '';
+		final s:StringBuf = new StringBuf();
 
 		while (true)
 		{
@@ -277,20 +295,20 @@ class Lexer
 								case -1:
 									break;
 								case '>'.code:
-									return s;
-									break;
+									return s.toString();
 								default:
-									s += '/';
+									s.add('/');
 									this.char = char;
 							}
 						default:
 							this.char = char;
 					}
 				default:
-					s += String.fromCharCode(char);
+					s.addChar(char);
 			}
 		}
-		return s;
+
+		return s.toString();
 	}
 
 	inline function readInt(firstChar:Int):Int
@@ -300,15 +318,16 @@ class Lexer
 
 	function readDigits(firstChar:Int):String
 	{
-		var s:String = String.fromCharCode(firstChar);
+		final s:StringBuf = new StringBuf();
+		s.addChar(firstChar);
 
 		while (true)
 		{
-			var char = readChar();
+			final char:Int = readChar();
 
 			if (char != -1 && isDigit(char))
 			{
-				s += String.fromCharCode(char);
+				s.addChar(char);
 			}
 			else
 			{
@@ -317,20 +336,21 @@ class Lexer
 			}
 		}
 
-		return s;
+		return s.toString();
 	}
 
 	function readHex():String
 	{
-		var s:String = '';
+		final s:StringBuf = new StringBuf();
+
 		while (true)
 		{
-			var c = readChar();
+			final c:Int = readChar();
 			if (c == -1)
 				break;
 			if (isHex(c))
 			{
-				s += String.fromCharCode(c);
+				s.addChar(c);
 			}
 			else
 			{
@@ -338,28 +358,30 @@ class Lexer
 				break;
 			}
 		}
-		return s;
+
+		return s.toString();
 	}
 
 	function readUntil(endCharCode:Int):String
 	{
-		var s:String = '';
+		final s:StringBuf = new StringBuf();
 		while (true)
 		{
 			final char:Int = readChar();
 			if (char == -1 || char == endCharCode)
 				break;
 
-			s += String.fromCharCode(char);
+			s.addChar(char);
 		}
-		return s;
+
+		return s.toString();
 	}
 
 	function skipLineComment():Void
 	{
 		while (true)
 		{
-			var char:Int = readChar();
+			final char:Int = readChar();
 
 			if (char == -1 || char == '\n'.code)
 				break;
@@ -395,7 +417,7 @@ class Lexer
 
 	inline function isIdentChar(c:Int):Bool
 	{
-		return (c >= 'a'.code && c <= 'z'.code) || (c >= 'A'.code && c <= 'Z'.code) || c == '_'.code || c == '.'.code || c == '-'.code;
+		return (c >= 'a'.code && c <= 'z'.code) || (c >= 'A'.code && c <= 'Z'.code) || c == '.'.code || c == '_'.code || c == '-'.code;
 	}
 
 	inline function isDigit(c:Int):Bool

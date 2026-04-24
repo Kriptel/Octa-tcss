@@ -10,7 +10,12 @@ typedef Pos =
 {
 	var min:Int;
 	var max:Int;
+
 	var line:Int;
+	var char:Int;
+	var endLine:Int;
+	var endChar:Int;
+
 	var file:String;
 }
 
@@ -70,6 +75,8 @@ enum FieldAccess
 {
 	AVirtual;
 	AAbstract;
+	ACustom;
+	APublic;
 }
 
 enum FieldType

@@ -10,4 +10,6 @@
 
 -hl test/export/hl/main.hl
 
+-cmd haxe tcss-api.hxml
+
 -cmd hl test/export/hl/main.hl

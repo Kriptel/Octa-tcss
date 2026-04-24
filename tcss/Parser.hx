@@ -26,7 +26,7 @@ class Parser
 	var tokens:Array<Token>;
 	var file:String;
 
-	var pos = 0;
+	var pos:Int;
 
 	public function new() {}
 
@@ -52,6 +52,7 @@ class Parser
 
 	public function parse(file:String, tokens:Array<Token>, ?cursorPos:Int = null):Module
 	{
+		this.pos = 0;
 		this.tokens = tokens;
 		this.file = file;
 		this.errors = [];
@@ -77,6 +78,9 @@ class Parser
 									min: t.s,
 									max: getCurToken().e,
 									line: t.l,
+									char: t.c,
+									endLine: t.el,
+									endChar: t.ec,
 									file: file
 								}
 						});
@@ -281,12 +285,28 @@ class Parser
 		{
 			var id = getIdent();
 
-			switch (id.t)
+			switch (id?.t)
 			{
 				case 'abstract':
-					access.push(AAbstract);
+					if (access.contains(AAbstract))
+						error(EUnexpectedToken(getCurToken()))
+					else
+						access.push(AAbstract);
 				case 'virtual':
-					access.push(AAbstract);
+					if (access.contains(AVirtual))
+						error(EUnexpectedToken(getCurToken()))
+					else
+						access.push(AVirtual);
+				case 'custom':
+					if (access.contains(ACustom))
+						error(EUnexpectedToken(getCurToken()))
+					else
+						access.push(ACustom);
+				case 'public':
+					if (access.contains(APublic))
+						error(EUnexpectedToken(getCurToken()))
+					else
+						access.push(APublic);
 				case 'extern':
 					if (maybe(TId('css')))
 					{
@@ -294,16 +314,22 @@ class Parser
 						switch (next.t)
 						{
 							case TRaw(content):
+								final curTkPos = getCurToken().pos;
+								final idPos:Pos = id.pos;
+
 								return [
 									{
 										pos:
 											{
-												line: id.pos.line,
-												min: id.pos.min,
-												max: getCurToken().e,
+												min: idPos.min,
+												max: curTkPos.max,
+												line: idPos.line,
+												char: idPos.char,
+												endLine: curTkPos.endLine,
+												endChar: curTkPos.endChar,
 												file: file
 											},
-										kind: FExternCss({t: content, pos: getCurToken().pos}),
+										kind: FExternCss({t: content, pos: curTkPos}),
 										access: access
 									}
 								];
@@ -387,12 +413,16 @@ class Parser
 					return [
 						for (nameLoc in nameLocs)
 						{
+							final curTk = getCurToken();
 							{
 								pos:
 									{
-										line: id.pos.line,
 										min: id.pos.min,
-										max: getCurToken().e,
+										max: curTk.e,
+										line: id.pos.line,
+										char: id.pos.char,
+										endLine: curTk.el,
+										endChar: curTk.ec,
 										file: file
 									},
 								kind: FVar(nameLoc, type, value, isDefault),
@@ -442,13 +472,17 @@ class Parser
 
 					ensure(TMt);
 
+					final curTk = getCurToken();
 					return {
 						t: units != null ? TUnit(id, enums, units) : TEnum(id, enums),
 						pos:
 							{
+								min: tk.e,
+								max: curTk.e,
 								line: tk.l,
-								min: tk.pos.min,
-								max: getCurToken().e,
+								char: tk.c,
+								endLine: curTk.el,
+								endChar: curTk.ec,
 								file: file
 							}
 					};
@@ -476,18 +510,38 @@ class Parser
 		switch (tk.t)
 		{
 			case TId(id):
-				return parseExprNext(makeExpr(EId(id), tk.s, tk.e, tk.l));
+				if (StringTools.contains(id, '.'))
+				{
+					final ids = id.split('.');
+
+					var e = makeExpr(EId(ids.shift()), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec);
+
+					for (i in ids)
+					{
+						if (i == '')
+						{
+							error(EUnexpectedToken(tk));
+							return null;
+						}
+
+						e = parseExprNext(makeExpr(EField(e, i), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec));
+					}
+
+					return parseExprNext(e);
+				}
+
+				return parseExprNext(makeExpr(EId(id), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec));
 			case TColor(color):
-				return parseExprNext(makeExpr(EConst(CColor(color)), tk.s, tk.e, tk.l));
+				return parseExprNext(makeExpr(EConst(CColor(color)), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec));
 			case TInt(i):
-				return parseExprNext(makeExpr(EConst(CInt(i, null)), tk.s, tk.e, tk.l));
+				return parseExprNext(makeExpr(EConst(CInt(i, null)), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec));
 			case TFloat(f):
-				return parseExprNext(makeExpr(EConst(CFloat(f, null)), tk.s, tk.e, tk.l));
+				return parseExprNext(makeExpr(EConst(CFloat(f, null)), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec));
 			case TString(s):
-				return parseExprNext(makeExpr(EConst(CString(s)), tk.s, tk.e, tk.l));
+				return parseExprNext(makeExpr(EConst(CString(s)), tk.s, tk.e, tk.l, tk.c, tk.el, tk.ec));
 			case TBrOpen:
 				back();
-				return parseExprNext(makeExpr(EObject(parseFields()), tk.s, getCurToken().e, tk.l));
+				return parseExprNext(makeExpr(EObject(parseFields()), tk.s, getCurToken().e, tk.l, tk.c, tk.el, tk.ec));
 			default:
 				error(EUnexpectedToken(tk));
 		}
@@ -502,28 +556,31 @@ class Parser
 		switch (tk.t)
 		{
 			case TDot:
-				return parseExprNext(makeExpr(EField(e, getIdent().t), e.min, getCurToken().e, e.line));
+				final fieldId = getIdent().t;
+				final curTk = getCurToken();
+				return parseExprNext(makeExpr(EField(e, fieldId), e.min, curTk.e, e.line, e.char, curTk.el, curTk.ec));
 			case TOp('|'):
 				final e2:Expr = parseExpr();
 
-				return parseExprNext(makeExpr(EBinop('|', e, e2), e.min, e2.max, e.line));
+				return parseExprNext(makeExpr(EBinop('|', e, e2), e.min, e2.max, e.line, e.char, e2.endLine, e2.endChar));
 			case TId(id):
 				switch (e.expr)
 				{
 					case EConst(CInt(i, null)):
-						return parseExprNext(makeExpr(EConst(CInt(i, id)), e.min, tk.e, e.line));
+						return parseExprNext(makeExpr(EConst(CInt(i, id)), e.min, tk.e, e.line, e.char, tk.el, tk.ec));
 					case EConst(CFloat(f, null)):
-						return parseExprNext(makeExpr(EConst(CFloat(f, id)), e.min, tk.e, e.line));
+						return parseExprNext(makeExpr(EConst(CFloat(f, id)), e.min, tk.e, e.line, e.char, tk.el, tk.ec));
 					default:
-						error(EUnexpectedToken(tk));
+						back();
+						return e;
 				}
 			case TOp('%'):
 				switch (e.expr)
 				{
 					case EConst(CInt(i, null)):
-						return parseExprNext(makeExpr(EConst(CInt(i, '%')), e.min, tk.e, e.line));
+						return parseExprNext(makeExpr(EConst(CInt(i, '%')), e.min, tk.e, e.line, e.char, tk.el, tk.ec));
 					case EConst(CFloat(f, null)):
-						return parseExprNext(makeExpr(EConst(CFloat(f, '%')), e.min, tk.e, e.line));
+						return parseExprNext(makeExpr(EConst(CFloat(f, '%')), e.min, tk.e, e.line, e.char, tk.el, tk.ec));
 					default:
 						error(EUnexpectedToken(tk));
 				}
@@ -534,14 +591,17 @@ class Parser
 		return null;
 	}
 
-	function makeExpr(e:ExprDef, min:Int, max:Int, line:Int):Expr
+	function makeExpr(e:ExprDef, min:Int, max:Int, line:Int, char:Int, endLine:Int, endChar:Int):Expr
 	{
 		return {
 			expr: e,
 			min: min,
 			max: max,
-			file: file,
-			line: line
+			line: line,
+			char: char,
+			endLine: endLine,
+			endChar: endChar,
+			file: file
 		}
 	}
 

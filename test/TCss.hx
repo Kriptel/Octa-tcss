@@ -12,9 +12,13 @@ function main()
 
 	var ast = importModule('main', 30);
 
-	var typedAst = new Sema().analyze(ast, importModule.bind(_, null));
+	final sema = new Sema();
+	var typedAst = sema.analyze(ast, importModule.bind(_, null));
 
 	trace(typedAst);
+
+	trace(sema.typeImpls);
+
 	trace(new Generator().generate(typedAst));
 }
 
@@ -31,7 +35,9 @@ function importModule(rawPath:String, ?cursor:Int):Module
 	if (path == null)
 		throw 'Can not find module: `$rawPath`';
 
-	var tokens = new tcss.Lexer(File.getContent(path)).tokenize();
+	final content = File.getContent(path);
+
+	var tokens = new tcss.Lexer(content).tokenize();
 
 	var parser = new Parser();
 

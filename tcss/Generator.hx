@@ -16,7 +16,7 @@ class Generator
 			switch (node)
 			{
 				case TRuleNode(selectors, body):
-					buf.add(selectors.join(", "));
+					buf.add(selectors.map(s -> Tools.escapeIdent(s)).join(", "));
 					buf.add(" {\n");
 					for (content in body)
 					{
@@ -57,7 +57,7 @@ class Generator
 				buf.add(";\n");
 
 			case Variable(name, value):
-				buf.add('\t--$name: $value;\n');
+				buf.add('\t--${validateFieldName(name)}: $value;\n');
 
 			case Raw(content):
 				buf.add('\t$content\n');
@@ -66,6 +66,6 @@ class Generator
 
 	private function validateFieldName(field:String)
 	{
-		return StringTools.replace(field, '.', '-');
+		return Tools.escapeIdent(StringTools.replace(field, '.', '-'));
 	}
 }
